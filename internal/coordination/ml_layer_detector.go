@@ -1,0 +1,388 @@
+package coordination
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/sirupsen/logrus"
+	"github.com/tosin2013/openshift-coordination-engine/internal/integrations"
+	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
+)
+
+// MLLayerDetector enhances layer detection with ML predictions
+type MLLayerDetector struct {
+	baseDetector              *LayerDetector // Keyword-based detector (fallback)
+	mlClient                  *integrations.MLClient
+	enableML                  bool
+	timeout                   time.Duration
+	probabilityThreshold      float64 // Minimum probability to mark layer as affected
+	rootCauseConfidenceThreshold float64 // Minimum confidence to use ML-suggested root cause
+	log                       *logrus.Logger
+}
+
+// NewMLLayerDetector creates a new ML-enhanced layer detector
+func NewMLLayerDetector(mlClient *integrations.MLClient, log *logrus.Logger) *MLLayerDetector {
+	return &MLLayerDetector{
+		baseDetector:                 NewLayerDetector(log),
+		mlClient:                     mlClient,
+		enableML:                     mlClient != nil,
+		timeout:                      5 * time.Second,
+		probabilityThreshold:         0.75, // 75% probability to mark layer as affected
+		rootCauseConfidenceThreshold: 0.85, // 85% confidence to use ML root cause suggestion
+		log:                          log,
+	}
+}
+
+// DetectLayersWithML performs ML-enhanced layer detection
+func (mld *MLLayerDetector) DetectLayersWithML(ctx context.Context, issueID, issueDescription string, resources []models.Resource) *models.LayeredIssue {
+	// 1. Start with keyword-based detection (fast path)
+	layeredIssue := mld.baseDetector.DetectLayers(ctx, issueID, issueDescription, resources)
+	layeredIssue.DetectionMethod = "keyword"
+
+	// Set initial keyword-based confidence (0.70)
+	for _, layer := range layeredIssue.AffectedLayers {
+		layeredIssue.LayerConfidence[layer] = 0.70
+	}
+
+	// 2. If ML is disabled or unavailable, return keyword results
+	if !mld.enableML {
+		mld.log.Debug("ML detection disabled, using keyword-based results")
+		RecordMLLayerDetection(false, false)
+		return layeredIssue
+	}
+
+	// 3. Call ML service for pattern analysis
+	mlCtx, cancel := context.WithTimeout(ctx, mld.timeout)
+	defer cancel()
+
+	startTime := time.Now()
+	mlPredictions, err := mld.getMLPredictions(mlCtx, issueDescription, resources)
+	duration := time.Since(startTime).Seconds()
+	RecordMLDetectionDuration(duration)
+
+	if err != nil {
+		mld.log.WithError(err).Warn("ML prediction failed, using keyword-based results")
+		RecordMLLayerDetection(false, true) // ML available but failed
+		return layeredIssue
+	}
+
+	// 4. Enhance with ML predictions
+	mld.enhanceWithMLPredictions(layeredIssue, mlPredictions)
+	layeredIssue.DetectionMethod = "ml_enhanced"
+
+	// Record metrics
+	RecordMLLayerDetection(true, true)
+	if mlPredictions.Infrastructure != nil {
+		RecordMLLayerConfidence(models.LayerInfrastructure, mlPredictions.Infrastructure.Probability)
+	}
+	if mlPredictions.Platform != nil {
+		RecordMLLayerConfidence(models.LayerPlatform, mlPredictions.Platform.Probability)
+	}
+	if mlPredictions.Application != nil {
+		RecordMLLayerConfidence(models.LayerApplication, mlPredictions.Application.Probability)
+	}
+
+	mld.log.WithFields(logrus.Fields{
+		"issue_id":        issueID,
+		"detection":       "ml_enhanced",
+		"ml_confidence":   mlPredictions.Confidence,
+		"affected_layers": layeredIssue.AffectedLayers,
+		"root_cause":      layeredIssue.RootCauseLayer,
+	}).Info("ML-enhanced layer detection complete")
+
+	return layeredIssue
+}
+
+// getMLPredictions calls ML service for layer predictions
+func (mld *MLLayerDetector) getMLPredictions(ctx context.Context, description string, resources []models.Resource) (*models.MLLayerPredictions, error) {
+	// Extract events from resources for pattern analysis
+	events := make([]string, 0, len(resources))
+	for _, r := range resources {
+		if r.Issue != "" {
+			events = append(events, r.Issue)
+		}
+	}
+
+	// Create pattern analysis request
+	// Note: We use empty metrics array and rely on analysis_type="layer_detection"
+	// The ML service will analyze the description and events to predict affected layers
+	req := &integrations.PatternAnalysisRequest{
+		Metrics: []integrations.MetricData{
+			// TODO: Could add resource metrics here if available
+			// For now, rely on description and events
+		},
+		TimeRange: struct {
+			Start time.Time `json:"start"`
+			End   time.Time `json:"end"`
+		}{
+			Start: time.Now().Add(-1 * time.Hour),
+			End:   time.Now(),
+		},
+		AnalysisType: "layer_detection",
+	}
+
+	mld.log.WithFields(logrus.Fields{
+		"description": description,
+		"resources":   len(resources),
+		"events":      len(events),
+	}).Debug("Calling ML pattern analysis for layer detection")
+
+	resp, err := mld.mlClient.AnalyzePatterns(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("ML pattern analysis failed: %w", err)
+	}
+
+	// Parse response into ML predictions
+	predictions := mld.parseMLResponse(resp, description, resources)
+
+	mld.log.WithFields(logrus.Fields{
+		"ml_confidence":   predictions.Confidence,
+		"patterns_found":  len(resp.Patterns),
+		"root_suggestion": predictions.RootCauseSuggestion,
+	}).Debug("ML predictions parsed")
+
+	return predictions, nil
+}
+
+// parseMLResponse converts PatternAnalysisResponse to MLLayerPredictions
+func (mld *MLLayerDetector) parseMLResponse(resp *integrations.PatternAnalysisResponse, description string, resources []models.Resource) *models.MLLayerPredictions {
+	predictions := &models.MLLayerPredictions{
+		Confidence:  resp.Summary.Confidence,
+		PredictedAt: time.Now(),
+		AnalysisType: "pattern",
+	}
+
+	// Extract pattern information
+	// The ML service should return patterns with layer-specific information
+	// For now, we use heuristics based on pattern type and confidence
+
+	// Check for infrastructure patterns
+	infraProb := mld.calculateLayerProbability(resp, models.LayerInfrastructure, description, resources)
+	if infraProb > 0.0 {
+		predictions.Infrastructure = &models.LayerPrediction{
+			Affected:    infraProb > mld.probabilityThreshold,
+			Probability: infraProb,
+			Evidence:    mld.extractEvidence(resp, models.LayerInfrastructure),
+			IsRootCause: false, // Will be set below
+		}
+	}
+
+	// Check for platform patterns
+	platformProb := mld.calculateLayerProbability(resp, models.LayerPlatform, description, resources)
+	if platformProb > 0.0 {
+		predictions.Platform = &models.LayerPrediction{
+			Affected:    platformProb > mld.probabilityThreshold,
+			Probability: platformProb,
+			Evidence:    mld.extractEvidence(resp, models.LayerPlatform),
+			IsRootCause: false,
+		}
+	}
+
+	// Check for application patterns
+	appProb := mld.calculateLayerProbability(resp, models.LayerApplication, description, resources)
+	if appProb > 0.0 {
+		predictions.Application = &models.LayerPrediction{
+			Affected:    appProb > mld.probabilityThreshold,
+			Probability: appProb,
+			Evidence:    mld.extractEvidence(resp, models.LayerApplication),
+			IsRootCause: false,
+		}
+	}
+
+	// Determine root cause based on highest probability
+	predictions.RootCauseSuggestion = mld.determineMLRootCause(infraProb, platformProb, appProb)
+
+	// Mark root cause layer
+	switch predictions.RootCauseSuggestion {
+	case models.LayerInfrastructure:
+		if predictions.Infrastructure != nil {
+			predictions.Infrastructure.IsRootCause = true
+		}
+	case models.LayerPlatform:
+		if predictions.Platform != nil {
+			predictions.Platform.IsRootCause = true
+		}
+	case models.LayerApplication:
+		if predictions.Application != nil {
+			predictions.Application.IsRootCause = true
+		}
+	}
+
+	return predictions
+}
+
+// calculateLayerProbability estimates layer probability from pattern analysis
+func (mld *MLLayerDetector) calculateLayerProbability(resp *integrations.PatternAnalysisResponse, layer models.Layer, description string, resources []models.Resource) float64 {
+	// Use pattern confidence as base probability
+	baseProbability := resp.Summary.Confidence
+
+	// Check if patterns mention this layer
+	layerMentioned := false
+	for _, pattern := range resp.Patterns {
+		if mld.patternMatchesLayer(pattern, layer) {
+			layerMentioned = true
+			// Boost probability if pattern strongly matches this layer
+			baseProbability = maxFloat64(baseProbability, pattern.Confidence)
+		}
+	}
+
+	// If layer not mentioned in patterns, return 0
+	if !layerMentioned {
+		// Fallback: check if any resources match this layer
+		for _, r := range resources {
+			if mld.resourceMatchesLayer(r, layer) {
+				return 0.70 // Keyword-based probability
+			}
+		}
+		return 0.0
+	}
+
+	return baseProbability
+}
+
+// patternMatchesLayer checks if a pattern description matches a layer
+func (mld *MLLayerDetector) patternMatchesLayer(pattern integrations.Pattern, layer models.Layer) bool {
+	description := pattern.Description + " " + pattern.Type
+
+	switch layer {
+	case models.LayerInfrastructure:
+		return containsAny(description, []string{"infrastructure", "node", "mco", "machine", "kernel", "os"})
+	case models.LayerPlatform:
+		return containsAny(description, []string{"platform", "operator", "sdn", "networking", "storage", "cluster"})
+	case models.LayerApplication:
+		return containsAny(description, []string{"application", "pod", "deployment", "container", "workload"})
+	default:
+		return false
+	}
+}
+
+// resourceMatchesLayer checks if a resource belongs to a layer
+func (mld *MLLayerDetector) resourceMatchesLayer(resource models.Resource, layer models.Layer) bool {
+	switch layer {
+	case models.LayerInfrastructure:
+		return resource.Kind == "Node" || resource.Kind == "MachineConfig" || resource.Kind == "MachineConfigPool"
+	case models.LayerPlatform:
+		return resource.Kind == "ClusterOperator" || resource.Kind == "NetworkPolicy"
+	case models.LayerApplication:
+		return resource.Kind == "Pod" || resource.Kind == "Deployment" || resource.Kind == "StatefulSet"
+	default:
+		return false
+	}
+}
+
+// extractEvidence extracts evidence from patterns for a specific layer
+func (mld *MLLayerDetector) extractEvidence(resp *integrations.PatternAnalysisResponse, layer models.Layer) []string {
+	evidence := []string{}
+
+	// Add insights as evidence
+	for _, insight := range resp.Insights {
+		if containsLayer(insight, layer) {
+			evidence = append(evidence, insight)
+		}
+	}
+
+	// Add pattern types as evidence
+	for _, pattern := range resp.Patterns {
+		if mld.patternMatchesLayer(pattern, layer) {
+			evidence = append(evidence, pattern.Type)
+		}
+	}
+
+	return evidence
+}
+
+// determineMLRootCause determines root cause based on layer probabilities
+func (mld *MLLayerDetector) determineMLRootCause(infraProb, platformProb, appProb float64) models.Layer {
+	// Infrastructure > Platform > Application (highest probability wins)
+	maxProb := maxFloat64(infraProb, maxFloat64(platformProb, appProb))
+
+	if maxProb == infraProb && infraProb > 0 {
+		return models.LayerInfrastructure
+	}
+	if maxProb == platformProb && platformProb > 0 {
+		return models.LayerPlatform
+	}
+	return models.LayerApplication
+}
+
+// enhanceWithMLPredictions merges ML predictions with keyword-based results
+func (mld *MLLayerDetector) enhanceWithMLPredictions(issue *models.LayeredIssue, mlPred *models.MLLayerPredictions) {
+	issue.MLPredictions = mlPred
+
+	// Update affected layers based on ML probabilities (use max of keyword and ML confidence)
+	if mlPred.Infrastructure != nil && mlPred.Infrastructure.Affected {
+		issue.AddAffectedLayer(models.LayerInfrastructure)
+		// Use max of keyword (0.70) and ML confidence
+		keywordConf := issue.LayerConfidence[models.LayerInfrastructure]
+		issue.LayerConfidence[models.LayerInfrastructure] = maxFloat64(keywordConf, mlPred.Infrastructure.Probability)
+	}
+
+	if mlPred.Platform != nil && mlPred.Platform.Affected {
+		issue.AddAffectedLayer(models.LayerPlatform)
+		keywordConf := issue.LayerConfidence[models.LayerPlatform]
+		issue.LayerConfidence[models.LayerPlatform] = maxFloat64(keywordConf, mlPred.Platform.Probability)
+	}
+
+	if mlPred.Application != nil && mlPred.Application.Affected {
+		issue.AddAffectedLayer(models.LayerApplication)
+		keywordConf := issue.LayerConfidence[models.LayerApplication]
+		issue.LayerConfidence[models.LayerApplication] = maxFloat64(keywordConf, mlPred.Application.Probability)
+	}
+
+	// Extract historical pattern from ML response
+	if len(mlPred.RootCauseSuggestion) > 0 {
+		issue.HistoricalPattern = fmt.Sprintf("%s_pattern", mlPred.RootCauseSuggestion)
+	}
+
+	// Use ML-suggested root cause if confidence is high enough
+	if mlPred.Confidence >= mld.rootCauseConfidenceThreshold {
+		issue.RootCauseLayer = mlPred.RootCauseSuggestion
+		mld.log.WithFields(logrus.Fields{
+			"ml_suggestion": mlPred.RootCauseSuggestion,
+			"confidence":    mlPred.Confidence,
+			"threshold":     mld.rootCauseConfidenceThreshold,
+		}).Info("Using ML-suggested root cause")
+	} else {
+		mld.log.WithFields(logrus.Fields{
+			"ml_suggestion":   mlPred.RootCauseSuggestion,
+			"ml_confidence":   mlPred.Confidence,
+			"threshold":       mld.rootCauseConfidenceThreshold,
+			"using_keyword": issue.RootCauseLayer,
+		}).Debug("ML confidence below threshold, using keyword-based root cause")
+	}
+}
+
+// Helper functions
+
+func maxFloat64(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func containsAny(text string, keywords []string) bool {
+	for _, keyword := range keywords {
+		if contains(text, keyword) {
+			return true
+		}
+	}
+	return false
+}
+
+func contains(text, substring string) bool {
+	// Simple contains check (case-insensitive)
+	textLower := text
+	substringLower := substring
+	for i := 0; i <= len(textLower)-len(substringLower); i++ {
+		if textLower[i:i+len(substringLower)] == substringLower {
+			return true
+		}
+	}
+	return false
+}
+
+func containsLayer(text string, layer models.Layer) bool {
+	return contains(text, string(layer))
+}

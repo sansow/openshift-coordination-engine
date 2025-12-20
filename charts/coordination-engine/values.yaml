@@ -1,0 +1,130 @@
+# Default values for coordination-engine
+# This is a YAML-formatted file.
+
+# Number of replicas
+replicaCount: 1
+
+# Image configuration
+image:
+  repository: image-registry.openshift-image-registry.svc:5000/self-healing-platform/coordination-engine
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+# Image pull secrets
+imagePullSecrets: []
+
+# Service account configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use
+  # If not set and create is true, a name is generated using the fullname template
+  name: "self-healing-operator"
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  fsGroup: 1001
+
+# Container security context
+securityContext:
+  capabilities:
+    drop:
+    - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8080
+  metricsPort: 9090
+
+# Resource limits
+resources:
+  requests:
+    memory: "256Mi"
+    cpu: "200m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Liveness probe configuration
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe configuration
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Environment variables
+env:
+  - name: LOG_LEVEL
+    value: "info"
+  - name: PORT
+    value: "8080"
+  - name: METRICS_PORT
+    value: "9090"
+  - name: ML_SERVICE_URL
+    value: "http://aiops-ml-service:8080"
+
+# Secret environment variables
+envFrom: []
+#  - secretRef:
+#      name: argocd-token
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Prometheus ServiceMonitor (requires prometheus-operator)
+monitoring:
+  enabled: true
+  interval: 30s
+  scrapeTimeout: 10s
+
+# RBAC configuration
+rbac:
+  create: true
+  # Additional rules can be added here
+  rules: []
+
+# Network policy
+networkPolicy:
+  enabled: false
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress: []
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80

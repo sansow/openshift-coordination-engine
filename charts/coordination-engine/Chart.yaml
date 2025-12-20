@@ -1,0 +1,16 @@
+apiVersion: v2
+name: coordination-engine
+description: OpenShift Coordination Engine - Multi-layer remediation orchestration
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - openshift
+  - aiops
+  - coordination
+  - remediation
+  - self-healing
+home: https://github.com/tosin2013/openshift-coordination-engine
+maintainers:
+  - name: OpenShift AIOps Team
+    email: aiops@example.com
