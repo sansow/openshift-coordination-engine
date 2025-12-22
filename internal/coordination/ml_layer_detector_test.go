@@ -7,6 +7,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
+
 	"github.com/tosin2013/openshift-coordination-engine/internal/integrations"
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
@@ -180,7 +181,7 @@ func TestPatternMatchesLayer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := detector.patternMatchesLayer(tt.pattern, tt.layer)
+			result := detector.patternMatchesLayer(&tt.pattern, tt.layer)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

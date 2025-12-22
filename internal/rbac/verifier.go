@@ -1,3 +1,4 @@
+// Package rbac provides RBAC permission verification for the coordination engine.
 package rbac
 
 import (
@@ -205,11 +206,12 @@ func GenerateReport(results []PermissionCheckResult) string {
 	errors := 0
 
 	for _, result := range results {
-		if result.Error != nil {
+		switch {
+		case result.Error != nil:
 			errors++
-		} else if result.Allowed {
+		case result.Allowed:
 			allowed++
-		} else {
+		default:
 			denied++
 		}
 	}

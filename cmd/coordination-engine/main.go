@@ -1,3 +1,4 @@
+// Package main implements the coordination engine HTTP server.
 package main
 
 import (

@@ -194,7 +194,7 @@ func (c *MLClient) AnalyzePatterns(ctx context.Context, req *PatternAnalysisRequ
 func (c *MLClient) HealthCheck(ctx context.Context) error {
 	endpoint := fmt.Sprintf("%s/health", c.baseURL)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", endpoint, http.NoBody)
 	if err != nil {
 		return fmt.Errorf("failed to create health check request: %w", err)
 	}

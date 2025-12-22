@@ -11,11 +11,12 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tosin2013/openshift-coordination-engine/internal/detector"
-	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/tosin2013/openshift-coordination-engine/internal/detector"
+	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
 
 func setupDetectionHandler() *mux.Router { //nolint:unparam // returns router for test setup
@@ -78,7 +79,7 @@ func TestNewDetectionHandler(t *testing.T) {
 func TestDetectDeployment_Success(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -99,7 +100,7 @@ func TestDetectDeployment_Success(t *testing.T) {
 func TestDetectDeployment_NotFound(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/nonexistent", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/nonexistent", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -117,7 +118,7 @@ func TestDetectDeployment_NotFound(t *testing.T) {
 func TestDetectStatefulSet_Success(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/statefulset/default/test-sts", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/statefulset/default/test-sts", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -138,7 +139,7 @@ func TestDetectStatefulSet_Success(t *testing.T) {
 func TestDetectStatefulSet_NotFound(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/statefulset/default/nonexistent", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/statefulset/default/nonexistent", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -156,7 +157,7 @@ func TestDetectStatefulSet_NotFound(t *testing.T) {
 func TestDetectDaemonSet_Success(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/daemonset/kube-system/test-ds", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/daemonset/kube-system/test-ds", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -177,7 +178,7 @@ func TestDetectDaemonSet_Success(t *testing.T) {
 func TestDetectDaemonSet_NotFound(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/daemonset/default/nonexistent", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/daemonset/default/nonexistent", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -196,13 +197,13 @@ func TestClearCache_Success(t *testing.T) {
 	router := setupDetectionHandler()
 
 	// First, populate the cache
-	req1 := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", nil)
+	req1 := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", http.NoBody)
 	w1 := httptest.NewRecorder()
 	router.ServeHTTP(w1, req1)
 	assert.Equal(t, http.StatusOK, w1.Code)
 
 	// Verify cache has entries
-	statsReq := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", nil)
+	statsReq := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", http.NoBody)
 	statsW := httptest.NewRecorder()
 	router.ServeHTTP(statsW, statsReq)
 
@@ -212,7 +213,7 @@ func TestClearCache_Success(t *testing.T) {
 	assert.Equal(t, float64(1), data["total_entries"])
 
 	// Clear cache
-	req := httptest.NewRequest("POST", "/api/v1/detect/cache/clear", nil)
+	req := httptest.NewRequest("POST", "/api/v1/detect/cache/clear", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -227,7 +228,7 @@ func TestClearCache_Success(t *testing.T) {
 	assert.Equal(t, "Cache cleared successfully", response.Message)
 
 	// Verify cache is empty
-	statsReq2 := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", nil)
+	statsReq2 := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", http.NoBody)
 	statsW2 := httptest.NewRecorder()
 	router.ServeHTTP(statsW2, statsReq2)
 
@@ -240,7 +241,7 @@ func TestClearCache_Success(t *testing.T) {
 func TestGetCacheStats_Success(t *testing.T) {
 	router := setupDetectionHandler()
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/cache/stats", http.NoBody)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -282,13 +283,13 @@ func TestRegisterRoutes(t *testing.T) {
 
 	for _, route := range getRoutes {
 		var match mux.RouteMatch
-		req := httptest.NewRequest("GET", route, nil)
+		req := httptest.NewRequest("GET", route, http.NoBody)
 		assert.True(t, router.Match(req, &match), "GET route %s should be registered", route)
 	}
 
 	// Test POST route
 	var match mux.RouteMatch
-	req := httptest.NewRequest("POST", "/api/v1/detect/cache/clear", nil)
+	req := httptest.NewRequest("POST", "/api/v1/detect/cache/clear", http.NoBody)
 	assert.True(t, router.Match(req, &match), "POST route /api/v1/detect/cache/clear should be registered")
 }
 
@@ -348,7 +349,7 @@ func TestDetectDeployment_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", nil)
+	req := httptest.NewRequest("GET", "/api/v1/detect/deployment/default/test-app", http.NoBody)
 	req = req.WithContext(ctx)
 	w := httptest.NewRecorder()
 

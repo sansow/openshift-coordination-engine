@@ -1,3 +1,4 @@
+// Package integrations provides clients for external service integrations (ArgoCD, ML service).
 package integrations
 
 import (

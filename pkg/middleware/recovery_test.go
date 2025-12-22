@@ -21,7 +21,7 @@ func TestRecovery_NoPanic(t *testing.T) {
 	middleware := Recovery(log)
 	wrappedHandler := middleware(handler)
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest("GET", "/test", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	wrappedHandler.ServeHTTP(rr, req)
@@ -41,7 +41,7 @@ func TestRecovery_WithPanic(t *testing.T) {
 	middleware := Recovery(log)
 	wrappedHandler := middleware(handler)
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest("GET", "/test", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	// Should not panic, should return 500

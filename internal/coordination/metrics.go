@@ -3,6 +3,7 @@ package coordination
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
 
@@ -146,6 +147,7 @@ var (
 		[]string{"layer"},
 	)
 
+	// MLDetectionDurationHist records duration of ML prediction calls
 	MLDetectionDurationHist = promauto.NewHistogram(
 		prometheus.HistogramOpts{
 			Name:    "coordination_engine_ml_detection_duration_seconds",
@@ -183,7 +185,7 @@ func RecordPlanGeneration(layersCount int, duration float64, success bool) {
 }
 
 // RecordPlanSteps records the number of steps in a plan
-func RecordPlanSteps(layersCount int, stepsCount int) {
+func RecordPlanSteps(layersCount, stepsCount int) {
 	layersCountStr := formatLayersCount(layersCount)
 	PlanStepsTotal.WithLabelValues(layersCountStr).Observe(float64(stepsCount))
 }
@@ -241,19 +243,20 @@ func formatLayersCount(count int) string {
 
 // formatStepsCount formats steps count as string for metrics labels
 func formatStepsCount(count int) string {
-	if count <= 5 {
+	switch {
+	case count <= 5:
 		return "1-5"
-	} else if count <= 10 {
+	case count <= 10:
 		return "6-10"
-	} else if count <= 20 {
+	case count <= 20:
 		return "11-20"
-	} else {
+	default:
 		return "20+"
 	}
 }
 
 // RecordMLLayerDetection records metrics for ML-enhanced layer detection (Phase 6)
-func RecordMLLayerDetection(success bool, mlAvailable bool) {
+func RecordMLLayerDetection(success, mlAvailable bool) {
 	successStr := "false"
 	if success {
 		successStr = "true"

@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
 

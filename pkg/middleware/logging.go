@@ -89,11 +89,12 @@ func RequestLogger(log *logrus.Logger) func(http.Handler) http.Handler {
 			})
 
 			// Log level based on status code
-			if rw.statusCode >= 500 {
+			switch {
+			case rw.statusCode >= 500:
 				logEntry.Error("Request completed with server error")
-			} else if rw.statusCode >= 400 {
+			case rw.statusCode >= 400:
 				logEntry.Warn("Request completed with client error")
-			} else {
+			default:
 				logEntry.Info("Request completed")
 			}
 		})

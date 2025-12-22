@@ -1,3 +1,4 @@
+// Package coordination implements multi-layer orchestration and health checking.
 package coordination
 
 import (
@@ -98,9 +99,9 @@ func (hc *HealthChecker) checkNodesReady(ctx context.Context) error {
 	}
 
 	notReadyNodes := 0
-	for _, node := range nodes.Items {
+	for i := range nodes.Items {
 		ready := false
-		for _, condition := range node.Status.Conditions {
+		for _, condition := range nodes.Items[i].Status.Conditions {
 			if condition.Type == corev1.NodeReady {
 				if condition.Status == corev1.ConditionTrue {
 					ready = true
@@ -111,7 +112,7 @@ func (hc *HealthChecker) checkNodesReady(ctx context.Context) error {
 
 		if !ready {
 			notReadyNodes++
-			hc.log.WithField("node", node.Name).Warn("Node is not ready")
+			hc.log.WithField("node", nodes.Items[i].Name).Warn("Node is not ready")
 		}
 	}
 
@@ -211,13 +212,13 @@ func (hc *HealthChecker) checkStorageAvailable(ctx context.Context) error {
 	}
 
 	failedPVs := 0
-	for _, pv := range pvs.Items {
-		if pv.Status.Phase == corev1.VolumeFailed {
+	for i := range pvs.Items {
+		if pvs.Items[i].Status.Phase == corev1.VolumeFailed {
 			failedPVs++
 			hc.log.WithFields(logrus.Fields{
-				"pv":     pv.Name,
-				"phase":  pv.Status.Phase,
-				"reason": pv.Status.Reason,
+				"pv":     pvs.Items[i].Name,
+				"phase":  pvs.Items[i].Status.Phase,
+				"reason": pvs.Items[i].Status.Reason,
 			}).Warn("PersistentVolume is in failed state")
 		}
 	}
@@ -324,13 +325,13 @@ func (hc *HealthChecker) checkNetworkingFunctional(ctx context.Context) error {
 	if err == nil && len(sdnPods.Items) > 0 {
 		// SDN is present, check pod health
 		problematicPods := 0
-		for _, pod := range sdnPods.Items {
-			if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
+		for i := range sdnPods.Items {
+			if sdnPods.Items[i].Status.Phase != corev1.PodRunning && sdnPods.Items[i].Status.Phase != corev1.PodSucceeded {
 				problematicPods++
 				hc.log.WithFields(logrus.Fields{
 					"namespace": sdnNamespace,
-					"pod":       pod.Name,
-					"phase":     pod.Status.Phase,
+					"pod":       sdnPods.Items[i].Name,
+					"phase":     sdnPods.Items[i].Status.Phase,
 				}).Warn("SDN pod is not healthy")
 			}
 		}
@@ -349,13 +350,13 @@ func (hc *HealthChecker) checkNetworkingFunctional(ctx context.Context) error {
 	if err == nil && len(ovnPods.Items) > 0 {
 		// OVN is present, check pod health
 		problematicPods := 0
-		for _, pod := range ovnPods.Items {
-			if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
+		for i := range ovnPods.Items {
+			if ovnPods.Items[i].Status.Phase != corev1.PodRunning && ovnPods.Items[i].Status.Phase != corev1.PodSucceeded {
 				problematicPods++
 				hc.log.WithFields(logrus.Fields{
 					"namespace": ovnNamespace,
-					"pod":       pod.Name,
-					"phase":     pod.Status.Phase,
+					"pod":       ovnPods.Items[i].Name,
+					"phase":     ovnPods.Items[i].Status.Phase,
 				}).Warn("OVN pod is not healthy")
 			}
 		}
@@ -393,14 +394,14 @@ func (hc *HealthChecker) checkIngressAvailable(ctx context.Context) error {
 	}
 
 	unavailableDeployments := 0
-	for _, deployment := range deployments.Items {
+	for i := range deployments.Items {
 		// Check if deployment is available
-		if deployment.Status.AvailableReplicas < deployment.Status.Replicas {
+		if deployments.Items[i].Status.AvailableReplicas < deployments.Items[i].Status.Replicas {
 			unavailableDeployments++
 			hc.log.WithFields(logrus.Fields{
-				"deployment":         deployment.Name,
-				"desired_replicas":   deployment.Status.Replicas,
-				"available_replicas": deployment.Status.AvailableReplicas,
+				"deployment":         deployments.Items[i].Name,
+				"desired_replicas":   deployments.Items[i].Status.Replicas,
+				"available_replicas": deployments.Items[i].Status.AvailableReplicas,
 			}).Warn("Ingress deployment is not fully available")
 		}
 	}
@@ -425,14 +426,14 @@ func (hc *HealthChecker) checkPodsRunning(ctx context.Context) error {
 	}
 
 	problematicPods := 0
-	for _, pod := range pods.Items {
+	for i := range pods.Items {
 		// Allow Running and Succeeded states
-		if pod.Status.Phase != corev1.PodRunning && pod.Status.Phase != corev1.PodSucceeded {
+		if pods.Items[i].Status.Phase != corev1.PodRunning && pods.Items[i].Status.Phase != corev1.PodSucceeded {
 			problematicPods++
 			hc.log.WithFields(logrus.Fields{
 				"namespace": namespace,
-				"pod":       pod.Name,
-				"phase":     pod.Status.Phase,
+				"pod":       pods.Items[i].Name,
+				"phase":     pods.Items[i].Status.Phase,
 			}).Warn("Pod is not in Running or Succeeded state")
 		}
 	}
@@ -461,10 +462,10 @@ func (hc *HealthChecker) checkEndpointsHealthy(ctx context.Context) error {
 	}
 
 	emptyEndpoints := 0
-	for _, ep := range endpoints.Items {
+	for i := range endpoints.Items {
 		// Check if endpoint has ready addresses
 		hasReadyAddresses := false
-		for _, subset := range ep.Subsets {
+		for _, subset := range endpoints.Items[i].Subsets {
 			if len(subset.Addresses) > 0 {
 				hasReadyAddresses = true
 				break
@@ -475,7 +476,7 @@ func (hc *HealthChecker) checkEndpointsHealthy(ctx context.Context) error {
 			emptyEndpoints++
 			hc.log.WithFields(logrus.Fields{
 				"namespace": namespace,
-				"endpoint":  ep.Name,
+				"endpoint":  endpoints.Items[i].Name,
 			}).Warn("Endpoint has no ready addresses")
 		}
 	}
@@ -503,13 +504,13 @@ func (hc *HealthChecker) checkServicesResponding(ctx context.Context) error {
 
 	// Just verify services exist and have valid specs
 	invalidServices := 0
-	for _, svc := range services.Items {
+	for i := range services.Items {
 		// Check if service has ports defined
-		if len(svc.Spec.Ports) == 0 {
+		if len(services.Items[i].Spec.Ports) == 0 {
 			invalidServices++
 			hc.log.WithFields(logrus.Fields{
 				"namespace": namespace,
-				"service":   svc.Name,
+				"service":   services.Items[i].Name,
 			}).Warn("Service has no ports defined")
 		}
 	}

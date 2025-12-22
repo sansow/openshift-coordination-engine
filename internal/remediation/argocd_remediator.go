@@ -1,3 +1,4 @@
+// Package remediation implements deployment-specific remediation strategies.
 package remediation
 
 import (

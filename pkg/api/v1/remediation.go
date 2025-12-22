@@ -219,11 +219,12 @@ func (h *RemediationHandler) ListIncidents(w http.ResponseWriter, r *http.Reques
 		}
 
 		// Add remediation status
-		if wf.Status == models.WorkflowStatusCompleted {
+		switch wf.Status {
+		case models.WorkflowStatusCompleted:
 			incident["status"] = "remediated"
-		} else if wf.Status == models.WorkflowStatusFailed {
+		case models.WorkflowStatusFailed:
 			incident["status"] = "failed"
-		} else {
+		default:
 			incident["status"] = "in_progress"
 		}
 

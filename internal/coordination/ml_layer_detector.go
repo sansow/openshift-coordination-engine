@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+
 	"github.com/tosin2013/openshift-coordination-engine/internal/integrations"
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
@@ -220,7 +221,7 @@ func (mld *MLLayerDetector) calculateLayerProbability(resp *integrations.Pattern
 	// Check if patterns mention this layer
 	layerMentioned := false
 	for _, pattern := range resp.Patterns {
-		if mld.patternMatchesLayer(pattern, layer) {
+		if mld.patternMatchesLayer(&pattern, layer) {
 			layerMentioned = true
 			// Boost probability if pattern strongly matches this layer
 			baseProbability = maxFloat64(baseProbability, pattern.Confidence)
@@ -242,7 +243,7 @@ func (mld *MLLayerDetector) calculateLayerProbability(resp *integrations.Pattern
 }
 
 // patternMatchesLayer checks if a pattern description matches a layer
-func (mld *MLLayerDetector) patternMatchesLayer(pattern integrations.Pattern, layer models.Layer) bool {
+func (mld *MLLayerDetector) patternMatchesLayer(pattern *integrations.Pattern, layer models.Layer) bool {
 	description := pattern.Description + " " + pattern.Type
 
 	switch layer {
@@ -284,7 +285,7 @@ func (mld *MLLayerDetector) extractEvidence(resp *integrations.PatternAnalysisRe
 
 	// Add pattern types as evidence
 	for _, pattern := range resp.Patterns {
-		if mld.patternMatchesLayer(pattern, layer) {
+		if mld.patternMatchesLayer(&pattern, layer) {
 			evidence = append(evidence, pattern.Type)
 		}
 	}

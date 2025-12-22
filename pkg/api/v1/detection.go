@@ -7,6 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+
 	"github.com/tosin2013/openshift-coordination-engine/internal/detector"
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
@@ -18,9 +19,9 @@ type DetectionHandler struct {
 }
 
 // NewDetectionHandler creates a new detection API handler
-func NewDetectionHandler(detector *detector.DeploymentDetector, log *logrus.Logger) *DetectionHandler {
+func NewDetectionHandler(det *detector.DeploymentDetector, log *logrus.Logger) *DetectionHandler {
 	return &DetectionHandler{
-		detector: detector,
+		detector: det,
 		log:      log,
 	}
 }
@@ -298,7 +299,7 @@ func isNotFoundError(err error) bool {
 	}
 	// Check for Kubernetes not found errors
 	errMsg := err.Error()
-	return len(errMsg) > 0 &&
+	return errMsg != "" &&
 		(strings.Contains(errMsg, "not found") ||
 			strings.Contains(errMsg, "NotFound"))
 }

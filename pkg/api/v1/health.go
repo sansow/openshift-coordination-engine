@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
-	"github.com/tosin2013/openshift-coordination-engine/internal/rbac"
-	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+
+	"github.com/tosin2013/openshift-coordination-engine/internal/rbac"
+	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
 
 // HealthHandler handles health check requests
@@ -118,7 +119,7 @@ func (h *HealthHandler) checkMLService(ctx context.Context) models.DependencyHea
 	// Try to reach ML service health endpoint
 	mlHealthURL := fmt.Sprintf("%s/health", h.mlServiceURL)
 
-	req, err := http.NewRequestWithContext(ctx, "GET", mlHealthURL, nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", mlHealthURL, http.NoBody)
 	if err != nil {
 		dep.Status = models.ComponentStatusDown
 		dep.Message = fmt.Sprintf("Failed to create request: %v", err)

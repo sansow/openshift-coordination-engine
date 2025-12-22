@@ -5,11 +5,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+
+	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )
 
 func TestNewOperatorRemediator(t *testing.T) {

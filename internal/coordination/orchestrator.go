@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/sirupsen/logrus"
+	"k8s.io/client-go/kubernetes"
+
 	"github.com/tosin2013/openshift-coordination-engine/internal/detector"
 	"github.com/tosin2013/openshift-coordination-engine/internal/remediation"
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
-	"k8s.io/client-go/kubernetes"
 )
 
 // MultiLayerOrchestrator executes multi-layer remediation plans
@@ -24,14 +25,14 @@ type MultiLayerOrchestrator struct {
 // NewMultiLayerOrchestrator creates a new multi-layer orchestrator
 func NewMultiLayerOrchestrator(
 	healthChecker *HealthChecker,
-	detector *detector.Detector,
+	det *detector.Detector,
 	strategySelector remediation.Remediator,
 	clientset kubernetes.Interface,
 	log *logrus.Logger,
 ) *MultiLayerOrchestrator {
 	return &MultiLayerOrchestrator{
 		healthChecker:    healthChecker,
-		detector:         detector,
+		detector:         det,
 		strategySelector: strategySelector,
 		clientset:        clientset,
 		log:              log,
@@ -72,7 +73,7 @@ func (mlo *MultiLayerOrchestrator) ExecutePlan(ctx context.Context, plan *models
 			"target":      step.Target,
 		}).Info("Executing remediation step")
 
-		if err := mlo.executeStep(ctx, step); err != nil {
+		if err := mlo.executeStep(ctx, &step); err != nil {
 			mlo.log.WithError(err).WithField("step", step.Order).Error("Step execution failed")
 
 			// For non-required steps, log warning but continue
@@ -191,7 +192,7 @@ func (mlo *MultiLayerOrchestrator) ExecutePlan(ctx context.Context, plan *models
 }
 
 // executeStep performs a single remediation action
-func (mlo *MultiLayerOrchestrator) executeStep(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) executeStep(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": step.ActionType,
 		"target": step.Target,
@@ -211,7 +212,7 @@ func (mlo *MultiLayerOrchestrator) executeStep(ctx context.Context, step models.
 }
 
 // executeInfrastructureStep executes infrastructure layer remediation
-func (mlo *MultiLayerOrchestrator) executeInfrastructureStep(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) executeInfrastructureStep(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": step.ActionType,
 		"target": step.Target,
@@ -233,7 +234,7 @@ func (mlo *MultiLayerOrchestrator) executeInfrastructureStep(ctx context.Context
 }
 
 // executePlatformStep executes platform layer remediation
-func (mlo *MultiLayerOrchestrator) executePlatformStep(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) executePlatformStep(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": step.ActionType,
 		"target": step.Target,
@@ -258,7 +259,7 @@ func (mlo *MultiLayerOrchestrator) executePlatformStep(ctx context.Context, step
 }
 
 // executeApplicationStep executes application layer remediation using remediators
-func (mlo *MultiLayerOrchestrator) executeApplicationStep(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) executeApplicationStep(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": step.ActionType,
 		"target": step.Target,
@@ -395,7 +396,7 @@ func (mlo *MultiLayerOrchestrator) rollbackSteps(ctx context.Context, steps []mo
 		}).Info("Rolling back step")
 
 		// Execute rollback action
-		if err := mlo.executeRollback(ctx, step); err != nil {
+		if err := mlo.executeRollback(ctx, &step); err != nil {
 			mlo.log.WithError(err).Error("Rollback step failed")
 			// Continue with remaining rollback steps
 		}
@@ -409,7 +410,7 @@ func (mlo *MultiLayerOrchestrator) rollbackSteps(ctx context.Context, steps []mo
 }
 
 // executeRollback performs rollback for a single step
-func (mlo *MultiLayerOrchestrator) executeRollback(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) executeRollback(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": "rollback_" + step.ActionType,
 		"target": step.Target,
@@ -435,7 +436,7 @@ func (mlo *MultiLayerOrchestrator) executeRollback(ctx context.Context, step mod
 }
 
 // rollbackApplicationStep rolls back application layer changes
-func (mlo *MultiLayerOrchestrator) rollbackApplicationStep(ctx context.Context, step models.RemediationStep) error {
+func (mlo *MultiLayerOrchestrator) rollbackApplicationStep(ctx context.Context, step *models.RemediationStep) error {
 	mlo.log.WithFields(logrus.Fields{
 		"action": step.ActionType,
 		"target": step.Target,

@@ -1,3 +1,4 @@
+// Package v1 implements the v1 REST API handlers for the coordination engine.
 package v1
 
 import (
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
+
 	"github.com/tosin2013/openshift-coordination-engine/internal/coordination"
 	"github.com/tosin2013/openshift-coordination-engine/pkg/models"
 )

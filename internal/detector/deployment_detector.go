@@ -1,3 +1,4 @@
+// Package detector provides deployment method and layer detection capabilities.
 package detector
 
 import (

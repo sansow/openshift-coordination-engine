@@ -24,12 +24,12 @@ type Orchestrator struct {
 
 // NewOrchestrator creates a new remediation orchestrator
 func NewOrchestrator(
-	detector *detector.Detector,
+	det *detector.Detector,
 	remediator Remediator,
 	log *logrus.Logger,
 ) *Orchestrator {
 	return &Orchestrator{
-		detector:   detector,
+		detector:   det,
 		remediator: remediator,
 		workflows:  make(map[string]*models.Workflow),
 		log:        log,
