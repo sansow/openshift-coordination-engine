@@ -115,3 +115,64 @@ jobs:
           else
             echo "No Helm integration tests found, skipping..."
           fi
+
+  openshift-integration:
+    name: OpenShift Cluster Integration
+    runs-on: ubuntu-latest
+    # Only run on push to main/develop (secrets not available on PRs from forks)
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Install OpenShift CLI
+        run: |
+          curl -LO https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz
+          tar -xzf openshift-client-linux.tar.gz
+          sudo mv oc /usr/local/bin/
+          sudo chmod +x /usr/local/bin/oc
+          oc version --client
+
+      - name: Login to OpenShift cluster
+        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        run: |
+          oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
+          oc whoami
+          oc cluster-info
+
+      - name: Run integration tests on OpenShift
+        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        run: |
+          export KUBECONFIG=$HOME/.kube/config
+          make test-integration
+        env:
+          ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL || 'http://localhost:8080' }}
+
+      - name: Run e2e tests on OpenShift
+        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        run: |
+          export KUBECONFIG=$HOME/.kube/config
+          make test-e2e
+
+      - name: Cleanup test resources
+        if: always() && ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        run: |
+          # Clean up any test namespaces created during testing
+          oc delete namespace coordination-engine-e2e --ignore-not-found=true
+          oc delete namespace coordination-engine-test --ignore-not-found=true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openshift-integration-test-results
+          path: |
+            test/integration/*.log
+            test/e2e/*.log
+            coverage/*.out
+          retention-days: 7
