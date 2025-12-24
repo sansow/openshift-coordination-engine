@@ -139,14 +139,14 @@ jobs:
           oc version --client
 
       - name: Login to OpenShift cluster
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != ''
         run: |
           oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
           oc whoami
           oc cluster-info
 
       - name: Run integration tests on OpenShift
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != ''
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-integration
@@ -154,13 +154,13 @@ jobs:
           ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL || 'http://localhost:8080' }}
 
       - name: Run e2e tests on OpenShift
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != ''
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-e2e
 
       - name: Cleanup test resources
-        if: always() && ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: always() && secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != ''
         run: |
           # Clean up any test namespaces created during testing
           oc delete namespace coordination-engine-e2e --ignore-not-found=true
