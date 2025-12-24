@@ -121,6 +121,8 @@ jobs:
     runs-on: ubuntu-latest
     # Only run on push to main/develop (secrets not available on PRs from forks)
     if: github.event_name == 'push' || github.event_name == 'schedule'
+    env:
+      HAS_OPENSHIFT_CREDENTIALS: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -139,14 +141,14 @@ jobs:
           oc version --client
 
       - name: Login to OpenShift cluster
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
         run: |
           oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
           oc whoami
           oc cluster-info
 
       - name: Run integration tests on OpenShift
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-integration
@@ -154,13 +156,13 @@ jobs:
           ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL || 'http://localhost:8080' }}
 
       - name: Run e2e tests on OpenShift
-        if: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-e2e
 
       - name: Cleanup test resources
-        if: always() && ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
+        if: always() && env.HAS_OPENSHIFT_CREDENTIALS == 'true'
         run: |
           # Clean up any test namespaces created during testing
           oc delete namespace coordination-engine-e2e --ignore-not-found=true
