@@ -1,4 +1,4 @@
-// +build integration
+//go:build integration
 
 package integration
 
@@ -100,9 +100,9 @@ func (s *IntegrationTestSuite) TestDeploymentDetector_ArgoCD() {
 func (s *IntegrationTestSuite) TestLayerDetector_Basic() {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
-	detector := coordination.NewLayerDetector(log)
+	layerDetector := coordination.NewLayerDetector(log)
 
-	s.Require().NotNil(detector, "Layer detector should be created")
+	s.Require().NotNil(layerDetector, "Layer detector should be created")
 
 	// Test infrastructure layer detection
 	resources := []models.Resource{
@@ -113,7 +113,7 @@ func (s *IntegrationTestSuite) TestLayerDetector_Basic() {
 		},
 	}
 
-	layeredIssue := detector.DetectLayers(s.ctx, "test-node-issue", "Node is not ready", resources)
+	layeredIssue := layerDetector.DetectLayers(s.ctx, "test-node-issue", "Node is not ready", resources)
 	s.Require().NotNil(layeredIssue)
 	s.Equal(models.LayerInfrastructure, layeredIssue.RootCauseLayer, "Node issues should be infrastructure layer")
 	s.T().Logf("Detected layer: %s", layeredIssue.RootCauseLayer)
@@ -123,7 +123,7 @@ func (s *IntegrationTestSuite) TestLayerDetector_Basic() {
 func (s *IntegrationTestSuite) TestLayerDetector_ApplicationLayer() {
 	log := logrus.New()
 	log.SetLevel(logrus.ErrorLevel)
-	detector := coordination.NewLayerDetector(log)
+	layerDetector := coordination.NewLayerDetector(log)
 
 	// Test pod issue detection (application layer)
 	resources := []models.Resource{
@@ -134,7 +134,7 @@ func (s *IntegrationTestSuite) TestLayerDetector_ApplicationLayer() {
 		},
 	}
 
-	layeredIssue := detector.DetectLayers(s.ctx, "test-pod-issue", "Pod is in CrashLoopBackOff", resources)
+	layeredIssue := layerDetector.DetectLayers(s.ctx, "test-pod-issue", "Pod is in CrashLoopBackOff", resources)
 	s.Require().NotNil(layeredIssue)
 	s.Equal(models.LayerApplication, layeredIssue.RootCauseLayer, "Pod issues should be application layer")
 	s.T().Logf("Detected application layer issue with %d affected layers", len(layeredIssue.AffectedLayers))
