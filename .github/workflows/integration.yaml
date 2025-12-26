@@ -119,10 +119,8 @@ jobs:
   openshift-integration:
     name: OpenShift Cluster Integration
     runs-on: ubuntu-latest
-    # Only run on push to main/develop (secrets not available on PRs from forks)
+    # Only run on push to main/develop or scheduled runs (secrets not available on PRs from forks)
     if: github.event_name == 'push' || github.event_name == 'schedule'
-    env:
-      HAS_OPENSHIFT_CREDENTIALS: ${{ secrets.OPENSHIFT_TOKEN != '' && secrets.OPENSHIFT_SERVER != '' }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -140,15 +138,25 @@ jobs:
           sudo chmod +x /usr/local/bin/oc
           oc version --client
 
+      - name: Check OpenShift credentials
+        id: check_creds
+        run: |
+          if [ -n "${{ secrets.OPENSHIFT_TOKEN }}" ] && [ -n "${{ secrets.OPENSHIFT_SERVER }}" ]; then
+            echo "has_creds=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_creds=false" >> $GITHUB_OUTPUT
+            echo "::warning::OpenShift credentials not configured - skipping cluster tests"
+          fi
+
       - name: Login to OpenShift cluster
-        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
+        if: steps.check_creds.outputs.has_creds == 'true'
         run: |
           oc login --token=${{ secrets.OPENSHIFT_TOKEN }} --server=${{ secrets.OPENSHIFT_SERVER }} --insecure-skip-tls-verify=true
           oc whoami
           oc cluster-info
 
       - name: Run integration tests on OpenShift
-        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
+        if: steps.check_creds.outputs.has_creds == 'true'
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-integration
@@ -156,13 +164,13 @@ jobs:
           ML_SERVICE_URL: ${{ secrets.ML_SERVICE_URL || 'http://localhost:8080' }}
 
       - name: Run e2e tests on OpenShift
-        if: env.HAS_OPENSHIFT_CREDENTIALS == 'true'
+        if: steps.check_creds.outputs.has_creds == 'true'
         run: |
           export KUBECONFIG=$HOME/.kube/config
           make test-e2e
 
       - name: Cleanup test resources
-        if: always() && env.HAS_OPENSHIFT_CREDENTIALS == 'true'
+        if: always() && steps.check_creds.outputs.has_creds == 'true'
         run: |
           # Clean up any test namespaces created during testing
           oc delete namespace coordination-engine-e2e --ignore-not-found=true
