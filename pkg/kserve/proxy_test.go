@@ -106,6 +106,7 @@ func TestProxyClient_LoadModelsFromEnv(t *testing.T) {
 		"KSERVE_PREDICTIVE_ANALYTICS_SERVICE":   "predictive-analytics-predictor",
 		"KSERVE_DISK_FAILURE_PREDICTOR_SERVICE": "disk-failure-predictor-predictor",
 		"KSERVE_NAMESPACE":                      "should-be-ignored", // Configuration variable
+		"KSERVE_PREDICTOR_PORT":                 "should-be-ignored", // Configuration variable
 		"OTHER_ENV_VAR":                         "should-be-ignored",
 		"KSERVE_EMPTY_SERVICE":                  "", // Empty value should be skipped
 	}
@@ -120,7 +121,8 @@ func TestProxyClient_LoadModelsFromEnv(t *testing.T) {
 	}()
 
 	cfg := ProxyConfig{
-		Namespace: "test-namespace",
+		Namespace:     "test-namespace",
+		PredictorPort: 8080,
 	}
 
 	client, err := NewProxyClient(cfg, log)
@@ -133,13 +135,55 @@ func TestProxyClient_LoadModelsFromEnv(t *testing.T) {
 	assert.Contains(t, models, "predictive-analytics")
 	assert.Contains(t, models, "disk-failure-predictor")
 
-	// Check model info
+	// Check model info - URL should now include port 8080
 	anomalyDetector, exists := client.GetModel("anomaly-detector")
 	assert.True(t, exists)
 	assert.Equal(t, "anomaly-detector", anomalyDetector.Name)
 	assert.Equal(t, "anomaly-detector-predictor", anomalyDetector.ServiceName)
 	assert.Equal(t, "test-namespace", anomalyDetector.Namespace)
-	assert.Equal(t, "http://anomaly-detector-predictor.test-namespace.svc.cluster.local", anomalyDetector.URL)
+	assert.Equal(t, "http://anomaly-detector-predictor.test-namespace.svc.cluster.local:8080", anomalyDetector.URL)
+}
+
+func TestProxyClient_LoadModelsFromEnv_DefaultPort(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	os.Setenv("KSERVE_TEST_MODEL_SERVICE", "test-service")
+	defer os.Unsetenv("KSERVE_TEST_MODEL_SERVICE")
+
+	// Test that default port (8080) is used when not specified
+	cfg := ProxyConfig{
+		Namespace: "test-ns",
+		// PredictorPort not set, should default to 8080
+	}
+
+	client, err := NewProxyClient(cfg, log)
+	require.NoError(t, err)
+
+	model, exists := client.GetModel("test-model")
+	assert.True(t, exists)
+	assert.Equal(t, "http://test-service.test-ns.svc.cluster.local:8080", model.URL)
+}
+
+func TestProxyClient_LoadModelsFromEnv_CustomPort(t *testing.T) {
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	os.Setenv("KSERVE_TEST_MODEL_SERVICE", "test-service")
+	defer os.Unsetenv("KSERVE_TEST_MODEL_SERVICE")
+
+	// Test custom port configuration
+	cfg := ProxyConfig{
+		Namespace:     "test-ns",
+		PredictorPort: 9000,
+	}
+
+	client, err := NewProxyClient(cfg, log)
+	require.NoError(t, err)
+
+	model, exists := client.GetModel("test-model")
+	assert.True(t, exists)
+	assert.Equal(t, "http://test-service.test-ns.svc.cluster.local:9000", model.URL)
 }
 
 func TestProxyClient_GetModel(t *testing.T) {
@@ -192,7 +236,8 @@ func TestProxyClient_GetAllModels(t *testing.T) {
 func TestProxyClient_Predict(t *testing.T) {
 	// Create mock KServe server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models/test-model:predict", r.URL.Path)
+		// KServe defaults to model name "model" when spec.predictor.model.name is not set
+		assert.Equal(t, "/v1/models/model:predict", r.URL.Path)
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -305,12 +350,13 @@ func TestProxyClient_Predict_ServerError(t *testing.T) {
 func TestProxyClient_CheckModelHealth(t *testing.T) {
 	// Create healthy mock server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/v1/models/test-model", r.URL.Path)
+		// KServe defaults to model name "model" when spec.predictor.model.name is not set
+		assert.Equal(t, "/v1/models/model", r.URL.Path)
 		assert.Equal(t, "GET", r.Method)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"name": "test-model"})
+		json.NewEncoder(w).Encode(map[string]string{"name": "model"})
 	}))
 	defer server.Close()
 

@@ -147,6 +147,45 @@ func main() {
 	coordinationHandler := v1.NewCoordinationHandler(layerDetector, multiLayerPlanner, multiLayerOrchestrator, log)
 	log.Info("Coordination handler initialized")
 
+	// Initialize Prometheus client for metrics querying (optional)
+	prometheusClient := initPrometheusClient(cfg, log)
+
+	// Create recommendations handler with KServe integration for ML predictions
+	var recommendationsHandler *v1.RecommendationsHandler
+	var predictionHandler *v1.PredictionHandler
+	if kserveProxyHandler != nil {
+		recommendationsHandler = v1.NewRecommendationsHandler(
+			orchestrator,
+			remediationHandler.GetIncidentStore(),
+			kserveProxyHandler.GetProxyClient(),
+			log,
+		)
+		predictionHandler = v1.NewPredictionHandler(
+			kserveProxyHandler.GetProxyClient(),
+			prometheusClient,
+			log,
+		)
+	} else {
+		recommendationsHandler = v1.NewRecommendationsHandler(
+			orchestrator,
+			remediationHandler.GetIncidentStore(),
+			nil, // No KServe client
+			log,
+		)
+		predictionHandler = v1.NewPredictionHandler(
+			nil, // No KServe client
+			prometheusClient,
+			log,
+		)
+	}
+
+	// Configure Prometheus client for real metrics if available
+	if prometheusClient != nil {
+		recommendationsHandler.SetPrometheusClient(prometheusClient)
+		log.WithField("prometheus_url", cfg.PrometheusURL).Info("Prometheus client configured for ML predictions")
+	}
+	log.Info("Recommendations handler initialized")
+
 	// API v1 routes
 	apiV1 := router.PathPrefix("/api/v1").Subrouter()
 
@@ -157,6 +196,14 @@ func main() {
 	apiV1.HandleFunc("/remediation/trigger", remediationHandler.TriggerRemediation).Methods("POST")
 	apiV1.HandleFunc("/workflows/{id}", remediationHandler.GetWorkflow).Methods("GET")
 	apiV1.HandleFunc("/incidents", remediationHandler.ListIncidents).Methods("GET")
+
+	// Recommendations endpoint (ML-powered remediation predictions)
+	apiV1.HandleFunc("/recommendations", recommendationsHandler.GetRecommendations).Methods("POST")
+	log.Info("Recommendations API endpoint registered: POST /api/v1/recommendations")
+
+	// Prediction endpoint (time-specific resource predictions)
+	predictionHandler.RegisterRoutes(router)
+	log.Info("Prediction API endpoint registered: POST /api/v1/predict")
 
 	// Detection endpoints
 	detectionHandler.RegisterRoutes(router)
@@ -313,6 +360,23 @@ func initRemediationComponents(
 	log.WithField("remediators", strategySelector.GetRegisteredRemediators()).Info("Remediation orchestrator initialized")
 
 	return orchestrator, strategySelector
+}
+
+// initPrometheusClient creates a Prometheus query client if configured
+func initPrometheusClient(cfg *config.Config, log *logrus.Logger) *integrations.PrometheusClient {
+	if cfg.PrometheusURL == "" {
+		log.Info("PROMETHEUS_URL not set, ML predictions will use default metric values")
+		return nil
+	}
+
+	client := integrations.NewPrometheusClient(cfg.PrometheusURL, cfg.HTTPTimeout, log)
+	if client == nil {
+		log.Warn("Failed to create Prometheus client")
+		return nil
+	}
+
+	log.WithField("prometheus_url", cfg.PrometheusURL).Info("Prometheus client initialized for metrics querying")
+	return client
 }
 
 // initKubernetesClient creates both standard and dynamic Kubernetes clients
