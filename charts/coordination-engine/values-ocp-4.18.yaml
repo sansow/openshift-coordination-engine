@@ -40,5 +40,8 @@ env:
     value: "anomaly-detector-predictor"
   - name: KSERVE_PREDICTIVE_ANALYTICS_SERVICE
     value: "predictive-analytics-predictor"
+  # Prometheus integration for metrics-based anomaly detection
+  - name: PROMETHEUS_URL
+    value: "https://thanos-querier.openshift-monitoring.svc:9091"
   - name: KSERVE_TIMEOUT
     value: "10s"
