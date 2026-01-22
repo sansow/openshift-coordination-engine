@@ -133,9 +133,11 @@ func (s *IncidentStore) Create(incident *models.Incident) (*models.Incident, err
 	// Store incident
 	s.incidents[incident.ID] = incident
 
-	// Persist to disk
+	// Persist to disk; roll back in-memory change if persistence fails
 	if err := s.save(); err != nil {
-		fmt.Printf("Warning: Failed to persist incident: %v\n", err)
+		// Ensure in-memory and on-disk state do not diverge
+		delete(s.incidents, incident.ID)
+		return nil, fmt.Errorf("failed to persist incident: %w", err)
 	}
 
 	return incident, nil
