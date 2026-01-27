@@ -1,5 +1,5 @@
 # Self-Healing Platform Demo - Red Hat One 2026
-## Prepared by: Sangz & Tosin Akinosho
+
 
 ---
 
